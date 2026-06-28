@@ -86,6 +86,8 @@ bool DiagnosticReporter::hasWarnings() const {
 }
 
 void DiagnosticReporter::dump() const {
+  std::cerr << "errors turned of to avoid teminal spam\n";
+  return;
   for (const auto &d : diags_)
     std::cerr << d.format() << "\n";
 }

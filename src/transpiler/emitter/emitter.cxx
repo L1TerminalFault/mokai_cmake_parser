@@ -6,13 +6,15 @@ Emitter::Emitter(DiagnosticReporter &reporter, const std::string &sourceDir)
     : reporter_(reporter), sourceDir_(sourceDir) {
   // Initialize manifest defaults
   manifest_.project.name = "unknown";
-  manifest_.project.cpp_version = "c++23";
+
+  // Commented out cuz mokai is about to deprecate it
+  // manifest_.project.cpp_version = "c++23";
   manifest_.project.include_dirs.clear();
   manifest_.project.dependencies.clear();
 
-  manifest_.compatibility.min_cpp_version = "c++20";
-  manifest_.compatibility.compilers.supported = {"clang", "gcc"};
-  manifest_.compatibility.compilers.unsupported = {"msvc"};
+  // manifest_.compatibility.min_cpp_version = "c++20";
+  // manifest_.compatibility.compilers.supported = {"clang", "gcc"};
+  // manifest_.compatibility.compilers.unsupported = {"msvc"};
 
   // manifest_.output.directory = "./build_output";
   // manifest_.output.configs["debug"].enabled = true;
@@ -105,12 +107,12 @@ void Emitter::emitTargets(const std::vector<ResolvedTarget> &tgts) {
   }
 
   // Set default_targets to the first executable found
-  for (const auto &rtgt : tgts) {
-    if (rtgt.type == "executable") {
-      manifest_.exports.default_targets.push_back(rtgt.name);
-      break;
-    }
-  }
+  // for (const auto &rtgt : tgts) {
+  //   if (rtgt.type == "executable") {
+  //     manifest_.exports.default_targets.push_back(rtgt.name);
+  //     break;
+  //   }
+  // }
 }
 
 } // namespace transpiler::emitter

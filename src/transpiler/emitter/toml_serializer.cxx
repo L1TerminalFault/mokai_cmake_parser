@@ -1,5 +1,6 @@
 #include <algorithm>
 
+#include "emitter/manifest.hxx"
 #include "toml_serializer.hxx"
 
 namespace transpiler::emitter {
@@ -146,6 +147,11 @@ void TomlSerializer::serializeOptions(
 
 void TomlSerializer::serializeCompat(std::ostringstream &oss,
                                      const Compatibility &compat) {
+  if (compat.compilers.supported.empty() ||
+      compat.compilers.unsupported.empty() ||
+      compat.unsupported_cpp_versions.empty() ||
+      compat.min_cpp_version.empty() || compat.preferred_cpp_version->empty())
+    return;
   oss << "# "
          "====================================================================="
          "==\n";
@@ -153,21 +159,31 @@ void TomlSerializer::serializeCompat(std::ostringstream &oss,
   oss << "# "
          "====================================================================="
          "==\n";
-  oss << "[compatibility]\n";
-  oss << "min_cpp_version = " << quoteString(compat.min_cpp_version) << "\n";
-  if (compat.preferred_cpp_version)
-    oss << "preferred_cpp_version = "
-        << quoteString(*compat.preferred_cpp_version) << "\n";
-  if (!compat.unsupported_cpp_versions.empty()) {
-    oss << "unsupported_cpp_versions = ";
-    writeArray(oss, compat.unsupported_cpp_versions);
-    oss << "\n";
-  }
+  if (!(compat.min_cpp_version.empty() ||
+        compat.preferred_cpp_version->empty() ||
+        compat.unsupported_cpp_versions.empty())) {
+    oss << "[compatibility]\n";
+    oss << "min_cpp_version = " << quoteString(compat.min_cpp_version) << "\n";
+    if (compat.preferred_cpp_version)
+      oss << "preferred_cpp_version = "
+          << quoteString(*compat.preferred_cpp_version) << "\n";
+    if (!compat.unsupported_cpp_versions.empty()) {
+      oss << "unsupported_cpp_versions = ";
+      writeArray(oss, compat.unsupported_cpp_versions);
+      oss << "\n";
+    }
+  };
+
+  if (compat.compilers.supported.empty() &&
+      compat.compilers.unsupported.empty())
+    return;
   oss << "\n[compatibility.compilers]\n";
-  oss << "supported = ";
+  if (compat.compilers.supported.size())
+    oss << "supported = ";
   writeArray(oss, compat.compilers.supported);
   oss << "\n";
-  oss << "unsupported = ";
+  if (compat.compilers.unsupported.size())
+    oss << "unsupported = ";
   writeArray(oss, compat.compilers.unsupported);
   oss << "\n\n";
 }
@@ -345,63 +361,71 @@ void TomlSerializer::serializeTargets(
 
 void TomlSerializer::serializeExports(std::ostringstream &oss,
                                       const Exports &exports) {
-  oss << "# "
-         "====================================================================="
-         "==\n";
-  oss << "# 8. INTERFACE DISTRIBUTION LAYER\n";
-  oss << "# "
-         "====================================================================="
-         "==\n";
-  oss << "[exports]\n";
+  if (exports.default_targets.size()) {
+    oss << "# "
+           "==================================================================="
+           "=="
+           "==\n";
+    oss << "# 8. INTERFACE DISTRIBUTION LAYER\n";
+    oss << "# "
+           "==================================================================="
+           "=="
+           "==\n";
+    oss << "[exports]\n";
 
-  if (!exports.default_targets.empty()) {
-    oss << "default_targets = ";
-    writeArray(oss, exports.default_targets);
-    oss << "\n";
-  }
+    if (!exports.default_targets.empty()) {
+      oss << "default_targets = ";
+      writeArray(oss, exports.default_targets);
+      oss << "\n";
+    }
 
-  if (!exports.include_dirs.empty()) {
-    oss << "include_dirs = ";
-    writeArray(oss, exports.include_dirs);
-    oss << "\n";
-  }
+    if (!exports.include_dirs.empty()) {
+      oss << "include_dirs = ";
+      writeArray(oss, exports.include_dirs);
+      oss << "\n";
+    }
 
-  if (!exports.defines_required.empty()) {
-    oss << "defines_required = ";
-    writeArray(oss, exports.defines_required);
-    oss << "\n";
-  }
+    if (!exports.defines_required.empty()) {
+      oss << "defines_required = ";
+      writeArray(oss, exports.defines_required);
+      oss << "\n";
+    }
 
-  if (!exports.defines_optional.empty()) {
-    oss << "defines_optional = ";
-    writeArray(oss, exports.defines_optional);
-    oss << "\n";
-  }
+    if (!exports.defines_optional.empty()) {
+      oss << "defines_optional = ";
+      writeArray(oss, exports.defines_optional);
+      oss << "\n";
+    }
 
-  for (const auto &prof : exports.profiles) {
-    oss << "[exports.profile.\"" << prof.name << "\"]\n";
-    oss << "targets = ";
-    writeArray(oss, prof.targets);
-    oss << "\n\n";
+    for (const auto &prof : exports.profiles) {
+      oss << "[exports.profile.\"" << prof.name << "\"]\n";
+      oss << "targets = ";
+      writeArray(oss, prof.targets);
+      oss << "\n\n";
+    }
   }
 }
 
 void TomlSerializer::serializeOutput(std::ostringstream &oss,
                                      const Output &output) {
-  oss << "# "
-         "====================================================================="
-         "==\n";
-  oss << "# 9. ARTIFACT GENERATION LAYOUT\n";
-  oss << "# "
-         "====================================================================="
-         "==\n";
-  oss << "[output]\n";
-  oss << "directory = " << quoteString(output.directory) << "\n\n";
+  if (output.directory.length()) {
+    oss << "# "
+           "==================================================================="
+           "=="
+           "==\n";
+    oss << "# 9. ARTIFACT GENERATION LAYOUT\n";
+    oss << "# "
+           "==================================================================="
+           "=="
+           "==\n";
+    oss << "[output]\n";
+    oss << "directory = " << quoteString(output.directory) << "\n\n";
 
-  for (const auto &[name, cfg] : output.configs) {
-    oss << "[output.configs.\"" << name << "\"]\n";
-    oss << "enabled = " << (cfg.enabled ? "true" : "false") << "\n";
-    oss << "subdir = " << quoteString(cfg.subdir) << "\n\n";
+    for (const auto &[name, cfg] : output.configs) {
+      oss << "[output.configs.\"" << name << "\"]\n";
+      oss << "enabled = " << (cfg.enabled ? "true" : "false") << "\n";
+      oss << "subdir = " << quoteString(cfg.subdir) << "\n\n";
+    }
   }
 }
 

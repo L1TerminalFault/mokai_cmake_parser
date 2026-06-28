@@ -20,13 +20,13 @@ namespace fs = std::filesystem;
 namespace cli {
 
 class Cli {
-  static std::string outputPath;
-  static std::string cmakePath;
+  std::string outputPath;
+  std::string cmakePath;
 
 public:
   Cli(char **argv) {
-    std::string cmakePath = argv[1] ?: "./CMakeLists";
-    std::string outputPath = /*(argc > 2) ?*/ argv[2] ?: "./mokai.toml";
+    cmakePath = argv[1] ?: "./CMakeLists";
+    outputPath = /*(argc > 2) ?*/ argv[2] ?: "./mokai.toml";
   }
 
   int run() {

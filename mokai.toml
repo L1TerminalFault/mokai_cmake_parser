@@ -1,8 +1,8 @@
 [project]
-name = "cmak"
+name = "cmaketomokai"
 cpp_version = "c++23"
 
-[target.cmak]
+[target.cmaketomokai]
 type = "executable"
 sources = ["src/**/*.cxx"]
 include_dirs = ["src/transpiler"]
