@@ -1,8 +1,8 @@
 [project]
-name = "my_mokai_project"
+name = "cmak"
 cpp_version = "c++23"
 
-[target.my_mokai_project]
+[target.cmak]
 type = "executable"
 sources = ["src/**/*.cxx"]
-include_dirs = ["src"]
+include_dirs = ["src/transpiler"]
