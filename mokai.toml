@@ -1,0 +1,8 @@
+[project]
+name = "my_mokai_project"
+cpp_version = "c++23"
+
+[target.my_mokai_project]
+type = "executable"
+sources = ["src/**/*.cxx"]
+include_dirs = ["src"]
