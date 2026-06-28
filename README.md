@@ -2,6 +2,8 @@
 
 # Project in its early stage please __DO NOT__ use for production purposes
 
+## Build: use `mokai build` (obviously)
+
 ## Architecture
 
 ### Lexer (`src/lexer/`)
