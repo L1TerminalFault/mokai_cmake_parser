@@ -1,11 +1,12 @@
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 
 #include "analyzer.hxx"
 
-using namespace transpiler::analyzer;
-
 namespace transpiler::analyzer {
+
+namespace fs = std::filesystem;
 
 // -----------------------------------------------------------------------
 // Constructor
@@ -215,6 +216,20 @@ void Analyzer::visit(MacroDefNode &node) {
 // Command handlers
 // -----------------------------------------------------------------------
 
+// Returns the directory of the file containing this command,
+// falling back to the root sourceDir_ if unavailable.
+static std::string baseDirFor(const CommandNode &cmd,
+                              const std::string &sourceDir) {
+  if (!cmd.loc.file.empty() && cmd.loc.file[0] == '/') {
+    // It's an absolute path — use its parent
+    try {
+      return std::filesystem::path(cmd.loc.file).parent_path().string();
+    } catch (...) {
+    }
+  }
+  return sourceDir;
+}
+
 void Analyzer::handleProject(const CommandNode &cmd) {
   if (cmd.args.empty())
     return;
@@ -354,23 +369,31 @@ void Analyzer::handleAddExecutable(const CommandNode &cmd) {
   std::string name = expand(cmd.args[0]);
   auto &target = getOrCreateTarget(name, cmd.loc);
   target.type = "executable";
+  // base_dir for this target is the directory of the file it was defined in
+  std::string baseDir = baseDirFor(cmd, sourceDir_);
 
   // Collect sources — skip keywords like WIN32, MACOSX_BUNDLE, IMPORTED, ALIAS
   static const std::vector<std::string> skipKws = {
       "WIN32", "MACOSX_BUNDLE", "IMPORTED", "ALIAS", "EXCLUDE_FROM_ALL"};
   for (size_t i = 1; i < cmd.args.size(); ++i) {
-    std::string val = expand(cmd.args[i]);
+    // First check if this arg is a keyword (don't path-resolve keywords)
+    std::string raw = expand(cmd.args[i]);
     std::string up;
-    for (char c : val)
+    for (char c : raw)
       up += (char)std::toupper((unsigned char)c);
-    bool skip = false;
+    bool isKw = false;
     for (auto &kw : skipKws)
       if (up == kw) {
-        skip = true;
+        isKw = true;
         break;
       }
-    if (!skip && !val.empty())
-      target.sources.push_back(val);
+    if (isKw)
+      continue;
+
+    // Expand, split list, strip genexprs, resolve paths
+    auto paths = expandAndSplit(cmd.args[i], baseDir, true);
+    for (auto &p : paths)
+      target.sources.push_back(p);
   }
 }
 
@@ -388,6 +411,8 @@ void Analyzer::handleAddLibrary(const CommandNode &cmd) {
       "STATIC", "SHARED", "MODULE",   "INTERFACE",
       "OBJECT", "ALIAS",  "IMPORTED", "EXCLUDE_FROM_ALL"};
 
+  std::string baseDir = baseDirFor(cmd, sourceDir_);
+  // Track which arg indices are source files (not type keywords)
   for (size_t i = 1; i < cmd.args.size(); ++i) {
     std::string val = expand(cmd.args[i]);
     std::string up;
@@ -409,15 +434,21 @@ void Analyzer::handleAddLibrary(const CommandNode &cmd) {
     if (up == "INTERFACE") {
       type = "static_library";
       continue;
-    } // approx
+    }
     bool isKw = false;
     for (auto &kw : typeKws)
       if (up == kw) {
         isKw = true;
         break;
       }
-    if (!isKw && !val.empty())
-      sources.push_back(val);
+    if (isKw)
+      continue;
+
+    // Use expandAndSplit for proper list splitting, genexpr stripping, path
+    // resolution
+    auto paths = expandAndSplit(cmd.args[i], baseDir, true);
+    for (auto &p : paths)
+      sources.push_back(p);
   }
   target.type = type;
   for (auto &s : sources)
@@ -429,20 +460,22 @@ void Analyzer::handleTargetSources(const CommandNode &cmd) {
     return;
   std::string name = expand(cmd.args[0]);
   auto &target = getOrCreateTarget(name, cmd.loc);
+  std::string baseDir = baseDirFor(cmd, sourceDir_);
 
-  // Skip visibility keywords: PUBLIC, PRIVATE, INTERFACE
   for (size_t i = 1; i < cmd.args.size(); ++i) {
-    std::string val = expand(cmd.args[i]);
+    std::string raw = expand(cmd.args[i]);
     std::string up;
-    for (char c : val)
+    for (char c : raw)
       up += (char)std::toupper((unsigned char)c);
     if (up == "PUBLIC" || up == "PRIVATE" || up == "INTERFACE")
       continue;
-    if (!val.empty()) {
+
+    auto paths = expandAndSplit(cmd.args[i], baseDir, true);
+    for (auto &p : paths) {
       if (currentCondition_.empty())
-        target.sources.push_back(val);
+        target.sources.push_back(p);
       else
-        target.sourcesIf.push_back({currentCondition_, {val}});
+        target.sourcesIf.push_back({currentCondition_, {p}});
     }
   }
 }
@@ -452,17 +485,20 @@ void Analyzer::handleTargetIncludeDirs(const CommandNode &cmd) {
     return;
   std::string name = expand(cmd.args[0]);
   auto &target = getOrCreateTarget(name, cmd.loc);
+  std::string baseDir = baseDirFor(cmd, sourceDir_);
 
   for (size_t i = 1; i < cmd.args.size(); ++i) {
-    std::string val = expand(cmd.args[i]);
+    std::string raw = expand(cmd.args[i]);
     std::string up;
-    for (char c : val)
+    for (char c : raw)
       up += (char)std::toupper((unsigned char)c);
     if (up == "PUBLIC" || up == "PRIVATE" || up == "INTERFACE" ||
         up == "BEFORE" || up == "SYSTEM")
       continue;
-    if (!val.empty())
-      target.includeDirs.push_back(val);
+
+    auto paths = expandAndSplit(cmd.args[i], baseDir, true);
+    for (auto &p : paths)
+      target.includeDirs.push_back(p);
   }
 }
 
@@ -577,15 +613,17 @@ void Analyzer::handleFindPackage(const CommandNode &cmd) {
 }
 
 void Analyzer::handleIncludeDirectories(const CommandNode &cmd) {
+  std::string baseDir = baseDirFor(cmd, sourceDir_);
   for (size_t i = 0; i < cmd.args.size(); ++i) {
-    std::string val = expand(cmd.args[i]);
+    std::string raw = expand(cmd.args[i]);
     std::string up;
-    for (char c : val)
+    for (char c : raw)
       up += (char)std::toupper((unsigned char)c);
     if (up == "AFTER" || up == "BEFORE" || up == "SYSTEM")
       continue;
-    if (!val.empty())
-      result_.globalIncludeDirs.push_back(val);
+    auto paths = expandAndSplit(cmd.args[i], baseDir, true);
+    for (auto &p : paths)
+      result_.globalIncludeDirs.push_back(p);
   }
 }
 
@@ -666,6 +704,153 @@ std::string Analyzer::normalizeCppStd(const std::string &val) {
   if (out.empty())
     return "c++23";
   return "c++" + out;
+}
+
+// -----------------------------------------------------------------------
+// stripGenExpr — handle $<BUILD_INTERFACE:x>, $<INSTALL_INTERFACE:x>, etc.
+// Returns the resolved path or "" to signal "drop this item".
+// -----------------------------------------------------------------------
+std::string Analyzer::stripGenExpr(const std::string &val) {
+  // Fast path: no generator expression
+  if (val.find("$<") == std::string::npos)
+    return val;
+
+  std::string result;
+  size_t i = 0;
+
+  while (i < val.size()) {
+    if (val[i] == '$' && i + 1 < val.size() && val[i + 1] == '<') {
+      // Find matching closing >  (handle nesting)
+      int depth = 1;
+      size_t j = i + 2;
+      while (j < val.size() && depth > 0) {
+        if (val[j] == '<')
+          ++depth;
+        else if (val[j] == '>')
+          --depth;
+        ++j;
+      }
+      // j now points past the closing >
+      std::string expr = val.substr(i + 2, j - i - 3); // contents inside $< >
+
+      // Classify the expression
+      auto colonPos = expr.find(':');
+      std::string exprName =
+          (colonPos != std::string::npos) ? expr.substr(0, colonPos) : expr;
+      std::string exprArg =
+          (colonPos != std::string::npos) ? expr.substr(colonPos + 1) : "";
+
+      // Upper-case name for comparison
+      std::string exprUp;
+      for (char c : exprName)
+        exprUp += (char)std::toupper((unsigned char)c);
+
+      if (exprUp == "BUILD_INTERFACE") {
+        // Keep the build-time path
+        result += stripGenExpr(exprArg); // recurse in case nested
+      } else if (exprUp == "INSTALL_INTERFACE") {
+        // Install-time path — irrelevant for build analysis
+        // Skip — contributes nothing to result
+      } else if (exprUp == "TARGET_GENEX_EVAL" || exprUp == "TARGET_PROPERTY" ||
+                 exprUp == "TARGET_FILE" || exprUp == "TARGET_FILE_DIR" ||
+                 exprUp == "TARGET_FILE_NAME") {
+        // Runtime-only — skip
+      } else {
+        // Unknown genexpr — preserve literally so it's visible as a warning
+        result += "$<" + expr + ">";
+      }
+      i = j;
+    } else {
+      result += val[i++];
+    }
+  }
+  return result;
+}
+
+// -----------------------------------------------------------------------
+// resolvePath — make a path absolute relative to baseDir.
+// Handles both relative and already-absolute paths.
+// -----------------------------------------------------------------------
+std::string Analyzer::resolvePath(const std::string &raw,
+                                  const std::string &baseDir) {
+  if (raw.empty())
+    return "";
+  // If it starts with $< there are still unresolved genexprs — skip
+  if (raw.find("$<") != std::string::npos)
+    return "";
+
+  try {
+    fs::path p(raw);
+    if (p.is_absolute())
+      return p.lexically_normal().string();
+    if (baseDir.empty())
+      return p.lexically_normal().string();
+    return (fs::path(baseDir) / p).lexically_normal().string();
+  } catch (...) {
+    return raw; // best-effort fallback
+  }
+}
+
+// -----------------------------------------------------------------------
+// expandAndSplit — expand one argument, split on ";" list separators,
+// strip generator expressions, optionally resolve as paths.
+// -----------------------------------------------------------------------
+std::vector<std::string> Analyzer::expandAndSplit(const Argument &arg,
+                                                  const std::string &baseDir,
+                                                  bool isPath) {
+  std::string raw = expander_.expandArg(arg);
+  auto items = Expander::splitList(raw);
+  std::vector<std::string> out;
+  out.reserve(items.size());
+  for (auto &item : items) {
+    if (item.empty())
+      continue;
+
+    // 1. Strip generator expressions — $<BUILD_INTERFACE:x> → x
+    std::string cleaned = stripGenExpr(item);
+    if (cleaned.empty())
+      continue;
+    // If unresolvable genexpr remains (e.g. $<TARGET_FILE:...>), drop
+    if (cleaned.find("$<") != std::string::npos)
+      continue;
+
+    // 2. Second variable expansion pass — the genexpr interior may contain
+    //    ${VAR} references that weren't visible to the first expandArg pass
+    //    (because expandArg sees a GenExpr token, not its internal text).
+    cleaned = scope_.expand(cleaned);
+    if (cleaned.empty())
+      continue;
+    // After var expansion, stray $< would mean truly unresolvable — drop
+    if (cleaned.find("$<") != std::string::npos)
+      continue;
+    // Unresolved ${VAR} references leave literal "${...}" in the string;
+    // that's still better than nothing — keep them but warn.
+    if (cleaned.find("${") != std::string::npos) {
+      reporter_.warning("", 0, 0,
+                        "unresolved variable reference in path: " + cleaned);
+    }
+
+    if (isPath) {
+      std::string abs = resolvePath(cleaned, baseDir);
+      if (!abs.empty())
+        out.push_back(abs);
+    } else {
+      out.push_back(cleaned);
+    }
+  }
+  return out;
+}
+
+std::vector<std::string>
+Analyzer::expandAndSplitAll(const std::vector<Argument> &args, size_t startIdx,
+                            const std::string &baseDir, bool isPath) {
+  std::vector<std::string> out;
+  for (size_t i = startIdx; i < args.size(); ++i) {
+    auto items = expandAndSplit(args[i], baseDir, isPath);
+    for (auto &item : items)
+      out.push_back(std::move(item));
+  }
+  return out;
 }
 
 } // namespace transpiler::analyzer

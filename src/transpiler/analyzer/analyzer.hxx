@@ -11,9 +11,6 @@
 #include "scope.hxx"
 #include "tree_merger.hxx"
 
-using namespace transpiler::diagnostics;
-using namespace transpiler::ast;
-
 namespace transpiler::analyzer {
 
 // -----------------------------------------------------------------------
@@ -151,6 +148,32 @@ private:
 
   // Normalise a CMake C++ standard value to "c++XX"
   static std::string normalizeCppStd(const std::string &val);
+
+  // Strip/simplify generator expressions from a path string.
+  //   $<BUILD_INTERFACE:x>    → x   (build-time path — keep it)
+  //   $<INSTALL_INTERFACE:x>  → ""  (install-time path — irrelevant for us)
+  //   $<TARGET_FILE:x>        → ""  (runtime — skip)
+  //   any other $<...>        → ""  (unknown — skip)
+  static std::string stripGenExpr(const std::string &val);
+
+  // Expand an argument, split on CMake list semicolons, strip gen-exprs,
+  // resolve each item as a path relative to baseDir.
+  // Items that are empty after processing are dropped.
+  // isPath = true  → resolve relative paths to absolute
+  // isPath = false → return as-is (for flags, defines, dep names)
+  std::vector<std::string> expandAndSplit(const Argument &arg,
+                                          const std::string &baseDir,
+                                          bool isPath = true);
+
+  // Same but over a whole arg list
+  std::vector<std::string> expandAndSplitAll(const std::vector<Argument> &args,
+                                             size_t startIdx,
+                                             const std::string &baseDir,
+                                             bool isPath = true);
+
+  // Resolve a single path string relative to baseDir → absolute path.
+  static std::string resolvePath(const std::string &raw,
+                                 const std::string &baseDir);
 
   // State
   DiagnosticReporter &reporter_;
