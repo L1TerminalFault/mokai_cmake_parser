@@ -3,42 +3,43 @@
 #include <print>
 #include <string_view>
 
-namespace transpiler::logger {
+namespace logger {
+
+static constexpr std::string_view RESET = "\033[0m";
+static constexpr std::string_view BOLD = "\033[1m";
+static constexpr std::string_view RED = "\033[31m";
+static constexpr std::string_view YELLOW = "\033[33m";
+static constexpr std::string_view GREEN = "\033[32m";
+static constexpr std::string_view BLUE = "\033[34m";
+static constexpr std::string_view MAGENTA = "\033[35m";
+static constexpr std::string_view DIM = "\033[2m";
+static constexpr std::string_view GREY = "\033[2;90m";
 
 struct Logger {
-  // ANSI Escape Codes for Colors
-  static constexpr std::string_view RESET = "\033[0m";
-  static constexpr std::string_view RED = "\033[31m";
-  static constexpr std::string_view YELLOW = "\033[33m";
-  static constexpr std::string_view GREEN = "\033[32m";
-  static constexpr std::string_view BLUE = "\033[34m";
-  static constexpr std::string_view MAGENTA = "\033[35m";
-
+  // ANSI Escape Codes
   static void error(std::string_view msg) {
-    std::println("{}[ERROR]: {}{}", RED, msg, RESET);
+    std::println("{}{}   error   {}│{} {}{}", BOLD, RED, GREY, RED, BOLD, msg, RESET);
   }
 
   static void warn(std::string_view msg) {
-    std::println("{}[WARNING]: {}{}", YELLOW, msg, RESET);
+    std::println("{}{}   warning {}│{} {}", BOLD, YELLOW, GREY, RESET, msg);
   }
 
   static void log(std::string_view msg) {
-    std::println("{}[LOG]: {}{}", RESET, msg, RESET);
+    std::println("{}   log     {}│ {}{}", DIM, GREY, msg, RESET);
   }
 
   static void info(std::string_view msg) {
-    std::println("{}[NOTE]: {}{}", BLUE, msg, RESET);
+    std::println("{}{}   note    {}│{} {}", BOLD, BLUE, GREY, RESET, msg);
+  }
+
+  static void success(std::string_view msg) {
+    std::println("{}{}   success {}│{} {}", BOLD, GREEN, GREY, RESET, msg);
   }
 
   static void tip(std::string_view msg) {
-    std::println("{}[TIP]: {}{}", MAGENTA, msg, RESET);
-  }
-
-  static void printUsage(const char *prog) {
-    log(std::string("usage: ") + prog +
-        "[path/to/CMakeLists.txt] [output.toml]\n\n");
-    log("Converts a CMake project to a mokai build system manifest.");
+    std::println("{}{}  tip     {}│ {}{}", BOLD, MAGENTA, GREY, msg, RESET);
   }
 };
 
-} // namespace transpiler::logger
+} // namespace logger

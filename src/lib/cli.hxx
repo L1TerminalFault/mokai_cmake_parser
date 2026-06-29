@@ -1,3 +1,5 @@
+#pragma once
+
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -9,12 +11,15 @@
 #include "emitter/toml_serializer.hxx"
 #include "lexer/lexer.hxx"
 #include "parser/parser.hxx"
+#include "utils/logger.hxx"
 
 using namespace transpiler::analyzer;
 using namespace transpiler::diagnostics;
 using namespace transpiler::emitter;
 using namespace transpiler::lexer;
 using namespace transpiler::parser;
+using namespace logger;
+
 namespace fs = std::filesystem;
 
 namespace cli {
@@ -24,17 +29,55 @@ class Cli {
   std::string cmakePath;
 
 public:
-  Cli(char **argv) {
-    cmakePath = argv[1] ?: "./CMakeLists";
-    outputPath = /*(argc > 2) ?*/ argv[2] ?: "./mokai.toml";
+  Cli(int argc, char **argv) {
+    if (argc > 1 && argv[1]) {
+      cmakePath = fs::path(argv[1]).make_preferred().string();
+    } else {
+      cmakePath = (fs::path(".") / "CMakeLists.txt").make_preferred().string();
+    }
+
+    // FIX: Removed duplicate block that was overwriting Windows-compatible
+    // paths
+    if (argc > 2 && argv[2]) {
+      std::string arg2(argv[2]);
+      if (arg2 == ".") {
+        outputPath = (fs::path(".") / "mokai.toml").make_preferred().string();
+      } else {
+        outputPath = fs::path(arg2).make_preferred().string();
+      }
+    } else {
+      outputPath = (fs::path(".") / "mokai.toml").make_preferred().string();
+    }
+  }
+
+  static int printUsage() {
+    std::println("\n{}{}Mokai CMake Transpiler Engine Pass{}", BOLD, MAGENTA,
+                 RESET);
+    std::println("{}{}==================================={}", DIM, MAGENTA,
+                 RESET);
+    std::println(
+        "{}Usage:{} cmaketotoml <path/to/CMakeLists.txt> [output_path.toml]",
+        BOLD, RESET);
+    std::println("{}Note:{}  Providing '.' or leaving the second argument "
+                 "blank defaults to './mokai.toml'\n",
+                 DIM, RESET);
+    return 0;
   }
 
   int run() {
+    // Check for help flags before opening any file streams
+    if (cmakePath == "--help" || cmakePath == "-h") {
+      return printUsage();
+    }
+
+    Logger::info(std::string("Target workspace entry file: ") + cmakePath);
 
     // Read the CMake file
     std::ifstream cmakeFile(cmakePath);
     if (!cmakeFile) {
-      std::cerr << "error: cannot open '" << cmakePath << "'\n";
+      Logger::error(
+          std::string("Failed to open source descriptor stream at: '") +
+          cmakePath + "'");
       return 1;
     }
     std::string cmakeSource((std::istreambuf_iterator<char>(cmakeFile)),
@@ -49,62 +92,69 @@ public:
     }
     if (sourceDir.empty())
       sourceDir = ".";
-    std::string binaryDir =
-        sourceDir; // simplified: assume build in-tree for now
+    std::string binaryDir = sourceDir;
 
     DiagnosticReporter reporter;
 
     // --- Lex ---
+    Logger::log("Running Lexical analyzer scanning patterns...");
     Lexer lx(cmakeSource, cmakePath, reporter);
     const auto &tokens = lx.tokenize();
 
     if (reporter.hasFatals()) {
-      std::cerr << "Lexing failed:\n";
+      Logger::error(
+          "Token scanning phase encountered critical structural faults.");
       reporter.dump();
       return 1;
     }
 
     // --- Parse ---
+    Logger::log("Parsing structural tokens into AST nodes...");
     Parser parser(tokens, cmakePath, reporter);
     auto root = parser.parse();
 
     if (reporter.hasFatals()) {
-      std::cerr << "Parsing failed:\n";
+      Logger::error("Grammar parser rejected source engine token alignments.");
       reporter.dump();
       return 1;
     }
 
     // --- Analyze ---
+    Logger::log("Analyzing compilation graphs and metadata targets...");
     Analyzer analyzer(reporter, sourceDir, binaryDir);
     AnalyzerResult analysisResult = analyzer.analyze(std::move(root));
 
     if (reporter.hasErrors()) {
-      std::cerr << "Analysis had errors:\n";
+      Logger::warn(
+          "Semantic pass recovered from minor target configuration anomalies.");
       reporter.dump();
-      // Continue anyway — we still produce output
     }
 
     // --- Emit ---
+    Logger::log("Emitting internal manifest representations...");
     Emitter emitter(reporter, sourceDir);
     MokaiManifest manifest = emitter.emit(analysisResult);
 
     // --- Serialize to TOML ---
+    Logger::log("Running TOML document node layout construction pass...");
     std::string tomlOutput = TomlSerializer::serialize(manifest);
 
     // --- Write output ---
-    if (outputPath.empty()) {
-      std::cout << tomlOutput;
-    } else {
-      std::ofstream outFile(outputPath);
-      if (!outFile) {
-        std::cerr << "error: cannot open '" << outputPath << "' for writing\n";
-        return 1;
-      }
-      outFile << tomlOutput;
-      std::cout << "✓ Wrote mokai manifest to: " << outputPath << "\n";
+    // FIX: Only open the file *now* so we don't wipe existing files if the
+    // compilation crashes mid-way
+    std::ofstream outFile(outputPath);
+    if (!outFile) {
+      Logger::error(
+          std::string("Failed to write to destination path stream: '") +
+          outputPath + "'");
+      return 1;
     }
 
-    // Print diagnostics summary
+    outFile << tomlOutput;
+    Logger::success(
+        std::string("Transpiled manifest generated successfully: ") +
+        outputPath);
+
     if (reporter.hasWarnings() || reporter.hasErrors()) {
       reporter.dump();
     }
@@ -113,4 +163,4 @@ public:
   }
 };
 
-}; // namespace cli
+} // namespace cli
