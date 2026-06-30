@@ -24,28 +24,32 @@ namespace fs = std::filesystem;
 namespace transpiler::entry {
 
 class Transpiler : public IParser {
-  // fs::path outputPath;
-  // fs::path targetPath;
-
 public:
   Transpiler(int argc, char **argv) {
-    if (argc > 1 && argv[1]) {
-      targetPath = fs::path(argv[1]).make_preferred().string();
+    // FIX 1: If no argument is passed, treat the target directory as current
+    // directory "."
+    fs::path resolvedTargetDir =
+        (argc > 1 && argv[1]) ? fs::path(argv[1]) : fs::path(".");
+
+    // Explicitly pair it to the file node for the stream check pass later
+    if (fs::is_directory(resolvedTargetDir)) {
+      targetPath = (resolvedTargetDir / "CMakeLists.txt").make_preferred();
     } else {
-      targetPath = (fs::path(".") / "CMakeLists.txt").make_preferred().string();
+      targetPath = resolvedTargetDir.make_preferred();
     }
 
-    // FIX: Removed duplicate block that was overwriting Windows-compatible
-    // paths
+    // Output destination parsing logic
     if (argc > 2 && argv[2]) {
       std::string arg2(argv[2]);
       if (arg2 == ".") {
-        outputPath = (fs::path(".") / "mokai.toml").make_preferred().string();
+        outputPath = (fs::path(".") / "mokai.toml").make_preferred();
       } else {
-        outputPath = fs::path(arg2).make_preferred().string();
+        outputPath = fs::path(arg2).make_preferred();
       }
     } else {
-      outputPath = (fs::path(".") / "mokai.toml").make_preferred().string();
+      // If no output target folder path is explicit, fallback relative to the
+      // input file path
+      outputPath = (targetPath.parent_path() / "mokai.toml").make_preferred();
     }
   }
 
@@ -54,41 +58,47 @@ public:
                  RESET);
     std::println("{}{}==================================={}", DIM, MAGENTA,
                  RESET);
-    std::println(
-        "{}Usage:{} cmaketotoml <path/to/CMakeLists.txt> [output_path.toml]",
-        BOLD, RESET);
-    std::println("{}Note:{}  Providing '.' or leaving the second argument "
-                 "blank defaults to './mokai.toml'\n",
+    std::println("{}Usage:{} cmaketotoml "
+                 "[path/to/project_dir_or_CMakeLists.txt] [output_path.toml]",
+                 BOLD, RESET);
+    std::println("{}Note:{} Leaving arguments blank defaults tracking paths "
+                 "automatically.\n",
                  DIM, RESET);
     return 0;
   }
 
   int run() override {
-    // Check for help flags before opening any file streams
-    if (targetPath == "--help" || targetPath == "-h") {
+    if (targetPath.string() == "--help" || targetPath.string() == "-h") {
       return printUsage();
     }
 
-    Logger::info(std::string("Target workspace entry file: ") +
-                 targetPath.string());
+    Logger::info("Parsing using static transpiler");
 
-    // Read the CMake file
+    // FIX 2: Validate that the file target descriptor structurally exists
+    // before streaming
+    if (!fs::exists(targetPath) || fs::is_directory(targetPath)) {
+      Logger::error("Mokai Error: No valid 'CMakeLists.txt' found at "
+                    "structural pathway: '" +
+                    fs::absolute(targetPath).string() + "'");
+      return 1;
+    }
+
+    // Read the CMake file safely
     std::ifstream cmakeFile(targetPath);
     if (!cmakeFile) {
-      Logger::error(
-          std::string("Failed to open source descriptor stream at: '") +
-          targetPath.string() + "'");
+      Logger::error("Failed to open source descriptor stream at: '" +
+                    targetPath.string() + "'");
       return 1;
     }
     std::string cmakeSource((std::istreambuf_iterator<char>(cmakeFile)),
                             std::istreambuf_iterator<char>());
 
-    // Get the source directory
+    // FIX 3: Safe, non-throwing environment layout extraction passes
     std::string sourceDir;
     try {
-      sourceDir = fs::absolute(fs::path(targetPath).parent_path()).string();
+      sourceDir = fs::absolute(targetPath.parent_path()).string();
     } catch (...) {
-      sourceDir = fs::path(targetPath).parent_path().string();
+      sourceDir = targetPath.parent_path().string();
     }
     if (sourceDir.empty())
       sourceDir = ".";
@@ -98,7 +108,7 @@ public:
 
     // --- Lex ---
     Logger::log("Running Lexical analyzer scanning patterns...");
-    Lexer lx(cmakeSource, targetPath, reporter);
+    Lexer lx(cmakeSource, targetPath.string(), reporter);
     const auto &tokens = lx.tokenize();
 
     if (reporter.hasFatals()) {
@@ -110,7 +120,7 @@ public:
 
     // --- Parse ---
     Logger::log("Parsing structural tokens into AST nodes...");
-    Parser parser(tokens, targetPath, reporter);
+    Parser parser(tokens, targetPath.string(), reporter);
     auto root = parser.parse();
 
     if (reporter.hasFatals()) {
@@ -140,18 +150,15 @@ public:
     std::string tomlOutput = TomlSerializer::serialize(manifest);
 
     // --- Write output ---
-    // FIX: Only open the file *now* so we don't wipe existing files if the
-    // compilation crashes mid-way
     std::ofstream outFile(outputPath);
     if (!outFile) {
-      Logger::error(
-          std::string("Failed to write to destination path stream: '") +
-          outputPath.string() + "'");
+      Logger::error("Failed to write to destination path stream: '" +
+                    outputPath.string() + "'");
       return 1;
     }
 
     outFile << tomlOutput;
-    Logger::success(std::string("Generated transpiled manifest"));
+    Logger::success("Generated transpiled manifest at: " + outputPath.string());
 
     if (reporter.hasWarnings() || reporter.hasErrors()) {
       reporter.dump();

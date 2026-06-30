@@ -43,13 +43,14 @@ public:
   }
 
   int run() override {
+    logger::Logger::info("Parsing using CMake API");
 
     // 1. Setup API hooks natively
-    logger::Logger::info("Injecting generation hooks...");
+    logger::Logger::log("Injecting generation hooks...");
     generateCMakeApiQuery(targetBuildDir);
 
     // 2. Drive the generation phase to build the JSON IR
-    logger::Logger::info("Running CMake intercept phase...");
+    logger::Logger::log("Running CMake intercept phase...");
     std::string cmakeCmd = "cmake -S " + targetPath.string() + " -B " +
                            targetBuildDir.string() + " > /dev/null 2>&1";
     int ret = std::system(cmakeCmd.c_str());
@@ -88,7 +89,7 @@ public:
                                     mokaiManifest); // Commit directly to file
       }
 
-      logger::Logger::success("Generated manifest with CMake Api");
+      logger::Logger::success("Generated manifest with CMake API");
     } catch (const std::exception &e) {
       logger::Logger::error(std::string(e.what()) + "\n");
       return 1;

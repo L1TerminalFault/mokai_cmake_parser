@@ -18,28 +18,27 @@ static constexpr std::string GREY = "\033[2;90m";
 struct Logger {
   // ANSI Escape Codes
   static void error(std::string msg) {
-    std::println("{}{} Error   {}│{} {}{}", BOLD, RED, GREY, RED, BOLD, msg,
-                 RESET);
+    std::println("{} Error     {}{}", RED, msg, RESET);
   }
 
   static void warn(std::string msg) {
-    std::println("{}{} Warning {}│{} {}", BOLD, YELLOW, GREY, RESET, msg);
+    std::println("{} Warning   {}{}", YELLOW, RESET, msg);
   }
 
   static void log(std::string msg) {
-    std::println("{} Log     {}│ {}{}", DIM, GREY, msg, RESET);
+    std::println("{} Log       {}{}", GREY, msg, RESET);
   }
 
   static void info(std::string msg) {
-    std::println("{}{} Note    {}│{} {}", BOLD, BLUE, GREY, RESET, msg);
+    std::println("{} Info      {}{}", BLUE, RESET, msg);
   }
 
   static void success(std::string msg) {
-    std::println("{}{} Success {}│{} {}", BOLD, GREEN, GREY, RESET, msg);
+    std::println("{} Success   {}{}", GREEN, RESET, msg);
   }
 
   static void tip(std::string msg) {
-    std::println("{}{} Tip     {}│ {}{}", BOLD, MAGENTA, GREY, msg, RESET);
+    std::println("{} Tip       {}{}", MAGENTA, msg, RESET);
   }
 };
 

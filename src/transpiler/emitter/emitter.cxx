@@ -38,7 +38,6 @@ std::string Emitter::makeRelative(const std::string &absolutePath) const {
     auto base = fs::path(outputDir_).lexically_normal();
     // Try to compute relative path
     auto rel = fs::relative(abs, base);
-    std::cout << rel.string() << std::endl;
     return rel.string();
   } catch (...) {
     return absolutePath; // fallback to absolute if relative fails
