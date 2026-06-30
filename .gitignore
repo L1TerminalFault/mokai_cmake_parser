@@ -2,3 +2,4 @@ build/
 .mokai/
 .~~deprecated/
 template.toml
+compile_commands.json

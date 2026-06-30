@@ -2,6 +2,7 @@
 
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 #include "manifest.hxx"
 
@@ -26,8 +27,9 @@ private:
                               const Compatibility &compat);
   static void serializeFileGroups(std::ostringstream &oss,
                                   const std::vector<FileGroup> &groups);
-  static void serializePropertyGroups(std::ostringstream &oss,
-                                      const std::vector<PropertyGroup> &groups);
+  static void serializePropertyGroups(
+      std::ostringstream &oss,
+      const std::unordered_map<std::string, PropertyGroup> &groups);
   static void serializeHooks(std::ostringstream &oss,
                              const std::vector<Hook> &hooks);
   static void

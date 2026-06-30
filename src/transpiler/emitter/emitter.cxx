@@ -1,9 +1,13 @@
 #include "emitter.hxx"
+#include <filesystem>
+#include <iostream>
 
 namespace transpiler::emitter {
+namespace fs = std::filesystem;
 
-Emitter::Emitter(DiagnosticReporter &reporter, const std::string &sourceDir)
-    : reporter_(reporter), sourceDir_(sourceDir) {
+Emitter::Emitter(DiagnosticReporter &reporter, const std::string &sourceDir,
+                 const std::string &outputDir)
+    : reporter_(reporter), sourceDir_(sourceDir), outputDir_(outputDir) {
   // Initialize manifest defaults
   manifest_.project.name = "unknown";
 
@@ -23,17 +27,135 @@ Emitter::Emitter(DiagnosticReporter &reporter, const std::string &sourceDir)
   // manifest_.output.configs["release"].subdir = "bin/release";
 }
 
+std::string Emitter::makeRelative(const std::string &absolutePath) const {
+  if (absolutePath.empty())
+    return "";
+  if (outputDir_.empty())
+    return absolutePath;
+
+  try {
+    auto abs = fs::path(absolutePath).lexically_normal();
+    auto base = fs::path(outputDir_).lexically_normal();
+    // Try to compute relative path
+    auto rel = fs::relative(abs, base);
+    std::cout << rel.string() << std::endl;
+    return rel.string();
+  } catch (...) {
+    return absolutePath; // fallback to absolute if relative fails
+  }
+}
+
+// MokaiManifest Emitter::emit(const AnalyzerResult &result) {
+//   emitProject(result.project);
+//   // emitOptions(result.options);
+//   emitTargets(result.targets);
+//
+//   // Global include dirs
+//   manifest_.project.include_dirs = result.globalIncludeDirs;
+//
+//   // Global dependencies
+//   manifest_.project.dependencies = result.globalDependencies;
+//
+//   return std::move(manifest_);
+// }
+
 MokaiManifest Emitter::emit(const AnalyzerResult &result) {
+  // MokaiManifest manifest;
+
+  // [project]
+  // manifest.project.name = result.project.name;
+  // if (!result.project.version.empty())
+  //     manifest.project.version = result.project.version;
+  // if (!result.project.cppStandard.empty())
+  //     manifest.project.cpp_version = result.project.cppStandard;
+  //
   emitProject(result.project);
   // emitOptions(result.options);
   emitTargets(result.targets);
 
-  // Global include dirs
-  manifest_.project.include_dirs = result.globalIncludeDirs;
+  // Global include dirs as relative paths
+  for (const auto &dir : result.globalIncludeDirs) {
+    manifest_.project.include_dirs.push_back(makeRelative(dir));
+  }
+
+  // [options]
+  for (const auto &opt : result.options) {
+    manifest_.options[opt.name] = opt.defaultValue;
+  }
 
   // Global dependencies
   manifest_.project.dependencies = result.globalDependencies;
 
+  // [target.NAME]
+  // for (const auto &rtgt : result.targets) {
+  //   Target tgt;
+  //   tgt.name = rtgt.name;
+  //   tgt.type = rtgt.type;
+  //
+  //   // Convert absolute paths to relative
+  //   for (const auto &src : rtgt.sources)
+  //     tgt.sources.push_back(makeRelative(src));
+  //   for (const auto &inc : rtgt.includeDirs)
+  //     tgt.include_dirs.push_back(makeRelative(inc));
+  //
+  //   tgt.flags = rtgt.flags;
+  //   tgt.depends_on = rtgt.dependsOn;
+  //   tgt.properties = rtgt.properties;
+  //
+  //   // sources_if
+  //   for (const auto &si : rtgt.sourcesIf) {
+  //     if (!si.condition.empty()) {
+  //       TargetSourcesIf tsi;
+  //       tsi.condition = si.condition;
+  //       for (const auto &p : si.patterns)
+  //         tsi.patterns.push_back(makeRelative(p));
+  //       tgt.sources_if.push_back(tsi);
+  //     }
+  //   }
+
+  // flags_if
+  // for (const auto &fi : rtgt.flagsIf) {
+  //   if (!fi.condition.empty()) {
+  //     TargetFlagsIf tfi;
+  //     tfi.condition = fi.condition;
+  //     tfi.flags = fi.flags;
+  //     tgt.flags_if.push_back(tfi);
+  //   }
+  // }
+  //
+  // properties_if (defines + depends_on)
+  // for (const auto &di : rtgt.definesIf) {
+  //   if (!di.condition.empty()) {
+  //     TargetPropertiesIf tpi;
+  //     tpi.condition = di.condition;
+  //     tpi.defines = di.defines;
+  //     tgt.properties_if.push_back(tpi);
+  //   }
+  // }
+  // for (const auto &dpi : rtgt.dependsIf) {
+  //   if (!dpi.condition.empty()) {
+  //     TargetPropertiesIf tpi;
+  //     tpi.condition = dpi.condition;
+  //     tpi.depends_on = dpi.deps;
+  //     tgt.properties_if.push_back(tpi);
+  //   }
+  // }
+
+  // manifest_.targets[tgt.name] = std::move(tgt);
+  // }
+
+  // [exports]
+  // for (const auto &tgt : result.targets) {
+  //   if (tgt.type == "executable") {
+  //     manifest_.exports.default_targets.push_back(tgt.name);
+  //     break; // Just the first executable
+  //   }
+  // }
+  //
+  for (const auto &inc : result.globalIncludeDirs)
+    manifest_.exports.include_dirs.push_back(makeRelative(inc));
+
+  // return manifest;
   return std::move(manifest_);
 }
 
@@ -56,8 +178,16 @@ void Emitter::emitTargets(const std::vector<ResolvedTarget> &tgts) {
     Target tgt;
     tgt.name = rtgt.name;
     tgt.type = rtgt.type;
-    tgt.sources = rtgt.sources;
-    tgt.include_dirs = rtgt.includeDirs;
+
+    // tgt.sources = rtgt.sources;
+    // tgt.include_dirs = rtgt.includeDirs;
+
+    // Convert absolute paths to relative
+    for (const auto &src : rtgt.sources)
+      tgt.sources.push_back(makeRelative(src));
+    for (const auto &inc : rtgt.includeDirs)
+      tgt.include_dirs.push_back(makeRelative(inc));
+
     tgt.flags = rtgt.flags;
     tgt.system_libs = rtgt.systemLibs;
     tgt.depends_on = rtgt.dependsOn;
@@ -68,7 +198,9 @@ void Emitter::emitTargets(const std::vector<ResolvedTarget> &tgts) {
       if (!cond.condition.empty()) {
         TargetSourcesIf si;
         si.condition = cond.condition;
-        si.patterns = cond.patterns;
+        // si.patterns = cond.patterns;
+        for (const auto &p : cond.patterns)
+          si.patterns.push_back(makeRelative(p));
         tgt.sources_if.push_back(si);
       }
     }
@@ -107,12 +239,12 @@ void Emitter::emitTargets(const std::vector<ResolvedTarget> &tgts) {
   }
 
   // Set default_targets to the first executable found
-  // for (const auto &rtgt : tgts) {
-  //   if (rtgt.type == "executable") {
-  //     manifest_.exports.default_targets.push_back(rtgt.name);
-  //     break;
-  //   }
-  // }
+  for (const auto &rtgt : tgts) {
+    if (rtgt.type == "static_library" || rtgt.type == "dynamic_library") {
+      manifest_.exports.default_targets.push_back(rtgt.name);
+      break;
+    }
+  }
 }
 
 } // namespace transpiler::emitter

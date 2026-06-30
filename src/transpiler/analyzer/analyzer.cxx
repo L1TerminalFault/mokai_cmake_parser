@@ -1,7 +1,9 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
+#include "../../lib/utils/logger.hxx"
 #include "analyzer.hxx"
 
 namespace transpiler::analyzer {
@@ -447,8 +449,10 @@ void Analyzer::handleAddLibrary(const CommandNode &cmd) {
     // Use expandAndSplit for proper list splitting, genexpr stripping, path
     // resolution
     auto paths = expandAndSplit(cmd.args[i], baseDir, true);
-    for (auto &p : paths)
+    for (auto &p : paths) {
       sources.push_back(p);
+      std::println("source: {}", p);
+    }
   }
   target.type = type;
   for (auto &s : sources)
@@ -472,9 +476,10 @@ void Analyzer::handleTargetSources(const CommandNode &cmd) {
 
     auto paths = expandAndSplit(cmd.args[i], baseDir, true);
     for (auto &p : paths) {
-      if (currentCondition_.empty())
+      if (currentCondition_.empty()) {
+        logger::Logger::log("source: " + p);
         target.sources.push_back(p);
-      else
+      } else
         target.sourcesIf.push_back({currentCondition_, {p}});
     }
   }
@@ -497,8 +502,10 @@ void Analyzer::handleTargetIncludeDirs(const CommandNode &cmd) {
       continue;
 
     auto paths = expandAndSplit(cmd.args[i], baseDir, true);
-    for (auto &p : paths)
+    for (auto &p : paths) {
+      std::cout << p << std::endl;
       target.includeDirs.push_back(p);
+    }
   }
 }
 

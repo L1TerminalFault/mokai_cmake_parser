@@ -5,4 +5,4 @@ cpp_version = "c++23"
 [target.cmaketomokai]
 type = "executable"
 sources = ["src/**/*.cxx"]
-include_dirs = ["src/transpiler"]
+include_dirs = ["src/transpiler", "src/lib", "src/parser_api", "interface.hxx"]

@@ -10,12 +10,15 @@ std::string TomlSerializer::serialize(const MokaiManifest &manifest) {
 
   // Sections in order per spec
   serializeProject(oss, manifest.project);
-  serializeOptions(oss, manifest.options);
+  if (!manifest.options.empty())
+    serializeOptions(oss, manifest.options);
   serializeCompat(oss, manifest.compatibility);
   serializeFileGroups(oss, manifest.file_groups);
-  serializePropertyGroups(oss, manifest.property_groups);
+  if (!manifest.property_groups.empty())
+    serializePropertyGroups(oss, manifest.property_groups);
   serializeHooks(oss, manifest.hooks);
-  serializeTargets(oss, manifest.targets);
+  if (!manifest.targets.empty())
+    serializeTargets(oss, manifest.targets);
   serializeExports(oss, manifest.exports);
   serializeOutput(oss, manifest.output);
 
@@ -100,9 +103,9 @@ void TomlSerializer::serializeProject(std::ostringstream &oss,
   if (p.cpp_version)
     oss << "cpp_version = " << quoteString(*p.cpp_version) << "\n";
 
-  if (p.version_from_file || p.version_from_pattern) {
-    oss << "version_from = { file = " << quoteString(*p.version_from_file)
-        << ", pattern = " << quoteString(*p.version_from_pattern) << " }\n";
+  if (p.version_from.file.length() || p.version_from.pattern.length()) {
+    oss << "version_from = { file = " << quoteString(p.version_from.file)
+        << ", pattern = " << quoteString(p.version_from.pattern) << " }\n";
   }
 
   if (!p.authors.empty()) {
@@ -210,7 +213,8 @@ void TomlSerializer::serializeFileGroups(std::ostringstream &oss,
 }
 
 void TomlSerializer::serializePropertyGroups(
-    std::ostringstream &oss, const std::vector<PropertyGroup> &groups) {
+    std::ostringstream &oss,
+    const std::unordered_map<std::string, PropertyGroup> &groups) {
   if (groups.empty())
     return;
 
@@ -221,9 +225,9 @@ void TomlSerializer::serializePropertyGroups(
   oss << "# "
          "====================================================================="
          "==\n";
-  for (const auto &grp : groups) {
+  for (const auto &[name, grp] : groups) {
     oss << "[[property_group]]\n";
-    oss << "name = " << quoteString(grp.name) << "\n";
+    oss << "name = " << quoteString(name) << "\n";
     if (grp.condition)
       oss << "condition = " << quoteString(*grp.condition) << "\n";
     if (!grp.defines.empty()) {
@@ -288,6 +292,9 @@ void TomlSerializer::serializeTargets(
   for (const auto &name : names) {
     auto it = targets.find(name);
     const Target &tgt = it->second;
+
+    if (tgt.type.empty())
+      continue;
 
     oss << "[target.\"" << name << "\"]\n";
     oss << "type = " << quoteString(tgt.type) << "\n";
@@ -397,8 +404,8 @@ void TomlSerializer::serializeExports(std::ostringstream &oss,
       oss << "\n";
     }
 
-    for (const auto &prof : exports.profiles) {
-      oss << "[exports.profile.\"" << prof.name << "\"]\n";
+    for (const auto &[pname, prof] : exports.profiles) {
+      oss << "[exports.profile.\"" << pname << "\"]\n";
       oss << "targets = ";
       writeArray(oss, prof.targets);
       oss << "\n\n";

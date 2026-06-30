@@ -20,8 +20,12 @@ struct ProjectManifest {
   std::optional<std::string> homepage;
   std::optional<std::string> default_compiler;
   std::optional<std::string> cpp_version;
-  std::optional<std::string> version_from_file;
-  std::optional<std::string> version_from_pattern;
+
+  struct {
+    std::string file;
+    std::string pattern;
+  } version_from;
+
   std::vector<std::string> authors;
   std::vector<std::string> include_dirs;
   std::vector<std::string> dependencies;
@@ -88,7 +92,7 @@ struct Exports {
   std::vector<std::string> include_dirs;
   std::vector<std::string> defines_required;
   std::vector<std::string> defines_optional;
-  std::vector<ExportProfile> profiles;
+  std::unordered_map<std::string, ExportProfile> profiles;
 };
 
 struct OutputConfig {
@@ -117,12 +121,20 @@ struct Compatibility {
 // -----------------------------------------------------------------------
 struct MokaiManifest {
   ProjectManifest project;
+
+  // [options]
   std::unordered_map<std::string, bool> options;
   Compatibility compatibility;
   std::vector<FileGroup> file_groups;
-  std::vector<PropertyGroup> property_groups;
+
+  // [property_group.NAME] - keyed by name
+  std::unordered_map<std::string, PropertyGroup> property_groups;
   std::vector<Hook> hooks;
+
+  // [target.NAME] - keyed by name
   std::unordered_map<std::string, Target> targets;
+
+  // [exports]
   Exports exports;
   Output output;
 };
