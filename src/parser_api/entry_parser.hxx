@@ -1,7 +1,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 
 #include "codemodel/codemodel_parser.hxx"
 #include "codemodel/idx_parser.hxx"
@@ -25,9 +24,9 @@ private:
 
 public:
   ApiParser(int argc, char *argv[]) {
-    if (argc < 2) {
-      std::cerr << "Usage: mokai <path_to_target_project>\n";
-    }
+    // if (argc < 2) {
+    //   std::cerr << "Usage: mokai <path_to_target_project>\n";
+    // }
 
     targetPath = argv[1];
     targetBuildDir = targetPath / "build";
@@ -43,7 +42,7 @@ public:
   }
 
   int run() override {
-    logger::Logger::info("Parsing using CMake API");
+    logger::Logger::info("Parsing using CMake API", "cmake api");
 
     // 1. Setup API hooks natively
     logger::Logger::log("Injecting generation hooks...");
@@ -56,8 +55,7 @@ public:
     int ret = std::system(cmakeCmd.c_str());
     if (ret != 0) {
       logger::Logger::error("CMake configuration failed.");
-      logger::Logger::tip(
-          " - Make sure the project correctly builds with CMake");
+      logger::Logger::tip("Make sure the project correctly builds with CMake");
       return ret;
     }
 

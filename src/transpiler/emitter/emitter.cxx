@@ -1,6 +1,5 @@
 #include "emitter.hxx"
 #include <filesystem>
-#include <iostream>
 
 namespace transpiler::emitter {
 namespace fs = std::filesystem;

@@ -53,26 +53,8 @@ public:
     }
   }
 
-  static int printUsage() {
-    std::println("\n{}{}Mokai CMake Transpiler Engine Pass{}", BOLD, MAGENTA,
-                 RESET);
-    std::println("{}{}==================================={}", DIM, MAGENTA,
-                 RESET);
-    std::println("{}Usage:{} cmaketotoml "
-                 "[path/to/project_dir_or_CMakeLists.txt] [output_path.toml]",
-                 BOLD, RESET);
-    std::println("{}Note:{} Leaving arguments blank defaults tracking paths "
-                 "automatically.\n",
-                 DIM, RESET);
-    return 0;
-  }
-
   int run() override {
-    if (targetPath.string() == "--help" || targetPath.string() == "-h") {
-      return printUsage();
-    }
-
-    Logger::info("Parsing using static transpiler");
+    Logger::info("Parsing using static transpiler", "static transpiler");
 
     // FIX 2: Validate that the file target descriptor structurally exists
     // before streaming
