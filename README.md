@@ -4,7 +4,15 @@
 
 ## Build: use `mokai build` (obviously)
 
-## Architecture
+## Architecture (main)
+
+### Parser CMake API 
+
+- If the project builds with `cmake` the tool will ask cmake itself and build reliable structure for mokai
+
+- If it doesn't build it will fallback to the Static Transpiler fallback method.
+
+## Architecture (fallback)
 
 ### Lexer (`src/lexer/`)
 
