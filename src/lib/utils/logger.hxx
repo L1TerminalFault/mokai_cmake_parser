@@ -36,7 +36,7 @@ static constexpr std::string MAGENTA = "\033[35m";
 static constexpr std::string DIM = "\033[2m";
 static constexpr std::string GREY = "\033[2;90m";
 
-struct SourceLocation {
+struct SourceLocation_ {
   std::string_view source_line;
   std::string_view hint;
   int line;
@@ -172,7 +172,7 @@ public:
 #endif
   }
 
-  static void ErrorInline(const SourceLocation &loc) {
+  static void ErrorInline(const SourceLocation_ &loc) {
 #if MOKAI_LOG_LEVEL <= MOKAI_LOG_LEVEL_ERROR
     std::string lineNo = std::to_string(loc.line);
     std::string gutter(lineNo.size(), ' ');

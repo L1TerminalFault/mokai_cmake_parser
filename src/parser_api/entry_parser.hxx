@@ -1,10 +1,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 #include "codemodel/codemodel_parser.hxx"
 #include "codemodel/idx_parser.hxx"
 #include "interface.hxx"
+#include "prepare/patch_gen.hxx"
+#include "prepare/patcher.hxx"
+#include "prepare/prescan.hxx"
 #include "target/target_transpiler.hxx"
 #include "utils/logger.hxx"
 
@@ -12,6 +16,7 @@ namespace fs = std::filesystem;
 
 using namespace cmake_api::codemodel;
 using namespace cmake_api::target;
+using namespace cmake_api::patcher;
 
 namespace cmake_api::entry {
 
@@ -24,9 +29,6 @@ private:
 
 public:
   ApiParser(int argc, char *argv[]) {
-    // if (argc < 2) {
-    //   std::cerr << "Usage: mokai <path_to_target_project>\n";
-    // }
 
     targetPath = argv[1];
     targetBuildDir = targetPath / "build";
@@ -50,14 +52,75 @@ public:
 
     // 2. Drive the generation phase to build the JSON IR
     logger::Logger::log("Running CMake intercept phase...");
-    std::string cmakeCmd = "cmake -S " + targetPath.string() + " -B " +
-                           targetBuildDir.string() + " > /dev/null 2>&1";
-    int ret = std::system(cmakeCmd.c_str());
+
+    // ----------------------------
+    // PHASE 1: SCAN
+    // ----------------------------
+    cmake_api::prescan::PreScanner scanner;
+
+    for (auto &p : fs::recursive_directory_iterator(targetPath)) {
+      if (p.path().extension() == ".txt" ||
+          p.path().filename() == "CMakeLists.txt" ||
+          p.path().extension() == ".cmake") {
+        scanner.scanFile(p.path());
+      }
+    }
+
+    logger::Logger::log("Found packages: " +
+                        std::to_string(scanner.packages.size()));
+
+    // ----------------------------
+    // PHASE 2: PATCH GEN
+    // ----------------------------
+    cmake_api::patchgen::PatchGen patch(targetPath);
+
+    // for (auto const &pkg : scanner.packages) {
+    //   patch.generate(pkg, targetBuildDir / ".mokai_parser_patch");
+    // }
+
+    patch.generate(scanner.packages, scanner.importedTargets);
+
+    // std::vector<std::string> flags;
+    // patch.generateDisableFlags(scanner.packages, flags);
+
+    // ----------------------------
+    // PHASE 3: RUN CMAKE
+    // ----------------------------
+
+    std::string patchDir = (targetBuildDir / ".mokai_parser_patch").string();
+
+    std::string cmd = "cmake -S " + targetPath.string() + " -B " +
+                      targetBuildDir.string() +
+
+                      // IMPORTANT: force module override first
+                      " -DCMAKE_MODULE_PATH=" + patchDir +
+
+                      // preload script hook
+                      " -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=" + patchDir +
+                      "/mokai_preload.cmake" +
+
+                      // DO NOT disable fetchcontent globally
+                      " -DFETCHCONTENT_FULLY_DISCONNECTED=OFF" +
+
+                      " -DMOKAI_PARSE_ONLY=ON"
+                      " > /dev/null 2>&1";
+
+    int ret = std::system(cmd.c_str());
+
     if (ret != 0) {
       logger::Logger::error("CMake configuration failed.");
       logger::Logger::tip("Make sure the project correctly builds with CMake");
       return ret;
     }
+
+    // INFO: Patch the CMake file first
+    // CMakePatcher patcher(targetPath);
+    // NATIVE PASS 1: Clean C++ Pre-processing injection step
+    // logger::Logger::log("Pre-processing configuration workspace targets...");
+    // patcher.patchFile(targetPath / fs::path("CMakeLists.txt"));
+    // logger::Logger::log("Injection secured across " +
+    //                     std::to_string(patcher.getPatchedCount()) +
+    //                     " blueprint nodes.");
 
     try {
       std::string codemodelFile = IndexParser::extractCodemodel(replyDir);

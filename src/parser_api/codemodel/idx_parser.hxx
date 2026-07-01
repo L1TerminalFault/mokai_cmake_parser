@@ -27,7 +27,7 @@ public:
       }
     }
     throw std::runtime_error(
-        "Parser: Could not locate a valid active environment index file.");
+        "Could not locate a valid active environment index file.");
   }
 };
 
